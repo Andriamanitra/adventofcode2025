@@ -1,6 +1,6 @@
 # My solutions to [Advent of Code](https://adventofcode.com) [2025](https://adventofcode.com/2025/)
 
-Not sure what I'm doing this year (yet)!
+I'm mostly using [Chapel](https://chapel-lang.org/) this year. Some days may contain additional solutions in other languages.
 
 ## Previous years:
 
