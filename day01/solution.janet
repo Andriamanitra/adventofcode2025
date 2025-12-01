@@ -1,0 +1,30 @@
+(def inputline
+    ~{ :main (sequence :line (some (sequence "\n" :line)))
+       :line (choice (sequence "R" (number :d+))
+                     (sequence "L" (replace (number :d+) ,-)))})
+
+(def rotations (peg/match inputline (slurp "input.txt")))
+
+(print "Part 1:")
+(pp (count |(= 0 $) (map |(% $ 100) (accumulate + 50 rotations))))
+
+(print "Part 2:")
+(var zeros 0)
+(var dial 50)
+(loop [rot :in rotations]
+  (when (and (= dial 0) (neg? rot))
+    (set dial 100)
+  )
+  (+= dial rot)
+  (while (< 100 dial)
+    (++ zeros)
+    (-= dial 100)
+  )
+  (while (< dial 0)
+    (++ zeros)
+    (+= dial 100)
+  )
+  (set dial (mod dial 100))
+  (when (zero? dial) (++ zeros))
+)
+(pp zeros)
