@@ -11,4 +11,4 @@ I'm mostly using [Chapel](https://chapel-lang.org/) this year. Some days may con
 * [2021](https://github.com/Andriamanitra/adventofcode2021) (various languages)
 * [2022](https://github.com/Andriamanitra/adventofcode2022) (Ruby)
 * [2023](https://github.com/Andriamanitra/adventofcode2023) (Flix)
-* [2024](https://github.com/Andriamanitra/adventofcode2023) (Janet)
+* [2024](https://github.com/Andriamanitra/adventofcode2024) (Janet)
