@@ -1,7 +1,7 @@
 use IO;
 use List;
 
-proc readInput(input: fileReader(locking=true)): list(int) {
+proc readInput(input: fileReader(?)): list(int) {
     var s: string;
     var rots: list(int);
     while input.read(s) {
@@ -63,11 +63,10 @@ proc test_part2() throws {
 }
 
 proc main(args: [] string) {
-    var reader = if args.size > 1
-                 then open(args[1], ioMode.r).reader(locking=true)
-                 else stdin;
+    var input = if args.size > 1
+                then readInput(open(args[1], ioMode.r).reader(locking=true))
+                else readInput(stdin);
 
-    var input = readInput(reader);
     writeln("Part 1: ", solvePart1(input));
     writeln("Part 2: ", solvePart2(input));
 }
