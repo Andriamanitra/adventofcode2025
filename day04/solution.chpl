@@ -63,18 +63,18 @@ proc solvePart2(input: string): int {
         return 4 >= + reduce grid[rs, cs];
     }
 
-    var removedCount = 0;
+    var removedCount: atomic int = 0;
     var oldCount = -1;
-    while oldCount < removedCount {
-        oldCount = removedCount;
-        for (r, c) in grid.domain {
+    while oldCount < removedCount.read() {
+        oldCount = removedCount.read();
+        forall (r, c) in grid.domain {
             if isAccessibleRollOfPaper(r, c) {
                 grid[r, c] = 0;
-                removedCount += 1;
+                removedCount.add(1);
             }
         }
     }
-    return removedCount;
+    return removedCount.read();
 }
 
 proc main(args: []string) {
