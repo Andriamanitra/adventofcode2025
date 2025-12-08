@@ -140,10 +140,9 @@ proc main(args: []string) {
         expect(solvePart2(example), name="Part 2: Example").to_eq(25272);
     } else {
         use IO;
-        var reader = if args.size > 1
-                     then open(args[1], ioMode.r).reader(locking=true)
-                     else stdin;
-        const input = reader.readAll(string);
+        const input = if args.size > 1
+                      then open(args[1], ioMode.r).reader().readAll(string)
+                      else stdin.readAll(string);
         writeln("Part 1:"); writeln(solvePart1(input));
         writeln("Part 2:"); writeln(solvePart2(input));
     }
