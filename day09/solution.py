@@ -1,9 +1,7 @@
-import argparse
-import pathlib
 import sys
 
 from collections import defaultdict
-from itertools import pairwise
+from itertools import pairwise, combinations
 from typing import NamedTuple
 
 
@@ -16,47 +14,41 @@ class Point(NamedTuple):
         x, y = s.split(",")
         return Point(int(x), int(y))
 
+
 class Size(NamedTuple):
     width: int
     height: int
 
 
 class Scaler:
-    def __init__(self, points: list[Point]):
-        sorted_xs = sorted(set(p.x for p in points))
-        sorted_ys = sorted(set(p.y for p in points))
-        self._upscale_x   = sorted_xs
-        self._upscale_y   = sorted_ys
+    def __init__(self, points: list[Point]) -> None:
+        sorted_xs = sorted({p.x for p in points})
+        sorted_ys = sorted({p.y for p in points})
+        self._upscale_x = sorted_xs
+        self._upscale_y = sorted_ys
         self._downscale_x = {x: i for i, x in enumerate(sorted_xs)}
         self._downscale_y = {y: i for i, y in enumerate(sorted_ys)}
 
     def downscaled_size(self) -> Size:
         return Size(width=len(self._downscale_x), height=len(self._downscale_y))
 
-    def downscale_x(self, x: int) -> int:
-        return self._downscale_x[x]
-
-    def downscale_y(self, y: int) -> int:
-        return self._downscale_y[y]
-
-    def upscale_x(self, x: int) -> int:
-        return self._upscale_x[x]
-
-    def upscale_y(self, y: int) -> int:
-        return self._upscale_y[y]
-
     def downscale_point(self, point: Point) -> Point:
         return Point(self._downscale_x[point.x], self._downscale_y[point.y])
 
-    def upscale_point(self, point: Point) -> Point:
-        return Point(self._upscale_x[point.x], self._upscale_y[point.y])
+    def calculate_area(self, x0: int, y0: int, x1: int, y1: int) -> int:
+        if x0 > x1:
+            x0, x1 = x1, x0
+        if y0 > y1:
+            y0, y1 = y1, y0
+        dy = self._upscale_y[y1] - self._upscale_y[y0]
+        dx = self._upscale_x[x1] - self._upscale_x[x0]
+        return (dx + 1) * (dy + 1)
 
 
 class CompactedImage(NamedTuple):
-    size: tuple[int, int]
-    corners: set[Point]
+    size: Size
+    corners: list[Point]
     tiles: set[Point]
-    colored_tiles: set[Point]
 
     #       X ->
     #       0     1     2     3     4
@@ -69,21 +61,18 @@ class CompactedImage(NamedTuple):
     #     3 +-----+-----+-----+-----+
 
     @staticmethod
-    def from_points(points: list[Point]) -> CompactedImage:
-        scaler = Scaler(points)
+    def from_points(points: list[Point], scaler: Scaler) -> CompactedImage:
         downscaled = [scaler.downscale_point(p) for p in points]
-        corners = set(downscaled)
-        path = downscaled + [downscaled[0]]
+        path = [*downscaled, downscaled[0]]
 
         tiles = set()
-        edge_left = set()
+        edge_left: set[Point] = set()
 
         for a, b in pairwise(path):
             if a.x == b.x:
                 x = a.x
                 y0, y1 = min(a.y, b.y), max(a.y, b.y)
-                for y in range(y0, y1):
-                    edge_left.add(Point(x, y))
+                edge_left.update(Point(x, y) for y in range(y0, y1))
 
         size = scaler.downscaled_size()
         for y in range(size.height):
@@ -94,10 +83,9 @@ class CompactedImage(NamedTuple):
                 if inside:
                     tiles.add(Point(x, y))
 
-        return CompactedImage(size, corners, tiles, set()), scaler
+        return CompactedImage(size, downscaled, tiles)
 
-    def largest_rectangle(self, points: list[Point], calculate_area):
-        points = set(points)
+    def largest_rectangle_area(self, calculate_area: Callable) -> int:
         horz = defaultdict(int)
         for y in range(self.size.height):
             acc = 0
@@ -118,81 +106,45 @@ class CompactedImage(NamedTuple):
                     acc = 0
 
         largest = 0
-        best = None
-        for y in range(self.size.height):
-            for x in range(self.size.width):
-                p = Point(x, y)
-                if p not in self.tiles:
-                    continue
-                dx_max = horz[p]
-                p0 = Point(x - dx_max, y - vert[p])
-                p1 = Point(x+1, y+1)
-                if calculate_area(p0, p1) < largest:
-                    continue
-                y0 = p0.y
-                for x0 in range(x, x - dx_max - 1, -1):
-                    y0 = max(y0, y - vert[x0, y])
-                    p0 = Point(x0, y0)
-                    if (
-                        p0 in self.corners and p1 in self.corners
-                        or
-                        Point(p0.x, p1.y) in self.corners and Point(p1.x, p0.y) in self.corners
-                    ):
-                        a = calculate_area(p0, p1)
-                        if a > largest:
-                            best = p0, p1
-                            largest = a
-        (x0, y0), (x1, y1) = best
-        for x in range(x0, x1):
-            for y in range(y0, y1):
-                self.colored_tiles.add(Point(x, y))
-
+        for a, b in combinations(self.corners, 2):
+            area = calculate_area(*a, *b)
+            if area <= largest:
+                continue
+            if a.x < b.x:
+                x0, x1 = a.x, b.x - 1
+            else:
+                x0, x1 = b.x, a.x - 1
+            if a.y < b.y:
+                y0, y1 = a.y, b.y - 1
+            else:
+                y0, y1 = b.y, a.y - 1
+            dx = x1 - x0
+            dy = y1 - y0
+            topright = Point(x1, y0)
+            bottomright = Point(x1, y1)
+            bottomleft = Point(x0, y1)
+            if (
+                horz[topright] >= dx and horz[bottomright] >= dx
+                and vert[bottomright] >= dy and vert[bottomleft] >= dy
+            ):
+                largest = area
         return largest
 
-    def draw_ppm(self, outputfile):
-        xsize, ysize = self.size
-        with outputfile as f:
-            f.write(b"P6\n")
-            f.write(f"{ysize} {xsize}\n".encode("utf-8"))
-            f.write(b"255\n")
-            for y in range(ysize):
-                for x in range(xsize):
-                    p = Point(x, y)
-                    if p in self.colored_tiles:
-                        px = (255, 0, 0)
-                    elif p in self.tiles:
-                        px = (100, 200, 100)
-                    else:
-                        px = (100, 100, 100)
-                    f.write(bytes(px))
 
-
-parser = argparse.ArgumentParser()
-parser.add_argument("inputfile", nargs="?", type=argparse.FileType("r"), default=sys.stdin)
-parser.add_argument("--draw-ppm", type=argparse.FileType("wb"), metavar="FNAME")
-opts = parser.parse_args(sys.argv[1:])
-
-lines = opts.inputfile.read().split()
+if len(sys.argv) > 1:
+    with open(sys.argv[1]) as f:
+        lines = f.read().split()
+else:
+    lines = sys.stdin.read().split()
 
 points = [Point.parse(line) for line in lines]
 
 largest_area_part1 = max(
-    (abs(p0.x - p1.x) + 1) * (abs(p0.y - p1.y) + 1)
-    for p0 in points
-    for p1 in points
+    (abs(a.x - b.x) + 1) * (abs(a.y - b.y) + 1)
+    for a, b in combinations(points, 2)
 )
 print("Part 1:", largest_area_part1)
 
-pointset = set(points)
-img, scaler = CompactedImage.from_points(points)
-
-# calculate area from downscaled coords
-def calculate_area(p0: Point, p1: Point) -> int:
-    p_NW = scaler.upscale_point(p0)
-    p_SE = scaler.upscale_point(p1)
-    return (p_SE.x - p_NW.x + 1) * (p_SE.y - p_NW.y + 1)
-
-largest_area = img.largest_rectangle(points, calculate_area)
-print("Part 2:", largest_area)
-if opts.draw_ppm is not None:
-    img.draw_ppm(opts.draw_ppm)
+scaler = Scaler(points)
+img = CompactedImage.from_points(points, scaler)
+print("Part 2:", img.largest_rectangle_area(scaler.calculate_area))
